@@ -1,0 +1,72 @@
+% motiv.tex
+
+\noindent\begin{minipage}{\linewidth}
+\begin{lstlisting}[
+caption={Path-sensitive analysis is more precise.},
+label=lst:ex1,
+]
+sensitive int secret = ??;
+int cond = ??;
+int i = ??;
+	
+int answer = secret + 1;
+if (cond > 3) answer += 10;
+else answer = i + 1;
+if (cond <= 3) answer = answer + 10;
+else answer = 20; 
+\end{lstlisting}
+\end{minipage}
+
+Listing~\ref{lst:ex1} shows a small program demonstrating the limitations of static analysis. The program shows a sensitive (confidential) value stored in the variable \code{secret}. The verification goal here is to ensure that \code{secret} does not flow to the untrusted variable \code{answer}. Static analyses, which include analyses based on security types~\cite{TerauchiSas05,MyersPopl99,SabelfeldComm03}, which infer \emph{security types} for each program variable would conclude that the variable \code{answer} is \emph{high security} because each of the two conditional blocks assign sensitive values to \code{answer}. However, a path-sensitive analysis reveals that when $\mcode{cond} > 3$, the sensitive value is erased in line~10. When $\mcode{cond} \leq 3$, a sensitive value is never assigned to \code{answer}.
+
+\begin{lstlisting}[
+caption={Dynamic taint analysis in BMC is more precise.},
+label=lst:ex2
+]
+sensitive int secret = ??;
+int n = ??;
+
+assume (n > 10);
+int answer = secret + 5;
+bool flag = 1;
+for (int i = 0; i < n; i++) {
+  if (flag) answer = 5;
+  else answer = answer + 10;
+  flag = !flag;
+}
+\end{lstlisting}
+
+Listing~\ref{lst:ex2} demonstrates the need for a dynamic analysis that goes beyond being path-sensitive. In this example, the confidential  variable \code{secret} is secret again and the verification task is to prove that there is no information flow from \code{secret} to \code{answer}. The Boolean variable \code{flag} controls the value stored in \code{answer}, and in particular if flag is \code{1}, the constant \code{5} is stored into \code{answer}, overwriting any previous information flow. A dynamic analysis which unrolls the loop is required to prove that this program is secure. Dynamic taint analyses~\cite{KangNdss11,SongIss08,CrandallMicro04,SchwartzSp10} can be used to verify such properties, but unfortunately these analyses are restricted to reasoning about one trace and therefore they cannot handle examples where information flow occurs throw control flow, like in Listing~\ref{lst:ex1}.\footnote{This is known as the \emph{implicit flow} problem.}
+
+Listing~\ref{lst:ex3} demonstrates the advantages of early-termination of dynamic analyses. In this example, the information flow from \code{secret} to \code{sum} does not occur after the third loop iteration. An analysis which can infer this fact can terminate early.
+
+\begin{itemize}
+\item Example 1 \\
+Path-sensitive analysis in MC gives more precise results than static analysis for security types.
+
+
+\item Example 2 \\
+Dynamic taint analysis in BMC gives more precise results than static analysis on loops.
+
+\item Example 3 \\
+Advantage of early termination
+
+\end{itemize}
+
+\begin{lstlisting}[
+caption={Advantages of Early-Termination.},
+label=lst:ex3
+]
+sensitive int secret = ??;
+int n = ??;
+assume(n > 10);
+
+int sum = 0;
+for (int i = 0; i < n; i++)  {
+	if (secret > 3) sum += i + 3;
+	else sum -= i - 5;
+	if (i >= 2)	sum = i + 10;
+}
+\end{lstlisting}
+
+

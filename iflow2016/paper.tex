@@ -1,0 +1,156 @@
+\documentclass{llncs}       % onecolumn (second format)
+
+\usepackage{listings}
+\usepackage[longend,ruled]{algorithm}
+\usepackage{algorithmic}
+\usepackage{fancyvrb}
+\usepackage{graphicx}
+\usepackage{tikz}
+%\usepackage{refs,xspace}
+%\usepackage{macros}
+\usepackage{times}
+%\usepackage{color,graphicx,enumerate}
+%\usepackage{amsmath,amssymb,amsfonts,xspace}
+\usepackage{url}
+%\usepackage[T1]{fontenc}
+\usepackage{floatflt}
+\usepackage{epsfig,pifont}
+
+\usepackage[square,sort&compress]{natbib}
+\usepackage{mdframed}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{xspace}
+\usepackage{amssymb,latexsym,amsfonts,amsmath}
+\usepackage{wrapfig}
+\usepackage{hyperref}
+\usepackage{paralist} 
+\usepackage{booktabs}
+\usepackage{multirow}
+%\usepackage{smallsec}
+%\usepackage[pdftex]{graphicx}
+%\DeclareGraphicsExtensions{.pdf}
+%\renewcommand{\baselinestretch}{0.95} 
+\usepackage[ruled,shortend,algo2e]{algorithm2e}
+\usepackage{comment}
+
+\definecolor{mygray}{rgb}{0.95,0.95,0.95}
+\definecolor{darkgreen}{rgb}{0,.45,0}
+\lstset{language=C}
+\lstset{backgroundcolor=\color{mygray}}
+\lstset{basicstyle=\ttfamily\small}
+\lstset{numbers=left, numberstyle=\small, stepnumber=1, numbersep=10pt}
+\lstset{keywordstyle=\color{red}\emph} %\bfseries
+\lstset{commentstyle=\color{darkgreen}}
+\lstset{numberbychapter=false}
+% these are the syntax-highlighting color definitions we will use.
+\lstdefinestyle{customc}{
+  belowcaptionskip=1\baselineskip,
+  breaklines=true,
+  frame=single,
+  language=C,
+  captionpos=b,
+  otherkeywords={uint8_t, assert, assume, bool, havoc, sensitive},
+  showstringspaces=false,
+  numbers=left,
+  basicstyle=\ttfamily,
+  keywordstyle=\bfseries\color{green!40!black},
+  commentstyle=\color{purple!40!black},
+  identifierstyle=\color{blue},
+  stringstyle=\color{orange},
+}
+\lstset{escapechar=@,style=customc}
+
+\newcommand{\code}[1]{$\mathtt{#1}$}
+\newcommand{\mcode}[1]{\mathtt{#1}}
+
+\usetikzlibrary{arrows,backgrounds,decorations,decorations.pathmorphing,positioning,fit,automata,shapes.multipart,shapes,snakes}
+\usetikzlibrary{patterns,matrix}
+\usepackage[normalem]{ulem}
+%\newenvironment{Example}{\begin{example}}{\hfill$\blacksquare$\end{example}}
+\setlength{\abovecaptionskip}{2pt}
+\addtolength{\textfloatsep}{-1ex}
+%\usepackage{flushend}
+% To eliminate orphans & widows
+\clubpenalty = 10000
+\widowpenalty = 10000
+\displaywidowpenalty = 10000
+
+\begin{document}
+
+\include{macros}
+\title{Lazy Self-Composition for Security Verification}
+
+%\author{Blank for double-blind review} 
+\author{ Weikun Yang \and 
+         Pramod Subramanyan \and 
+         Yakir Vizel \and
+         Aarti Gupta \and 
+         Sharad Malik} 
+
+\institute{Princeton University}
+
+\maketitle
+
+\begin{abstract}
+\begin{comment}
+We present a novel path-sensitive information flow analysis technique.
+
+Secure information flow analysis is meant to detect if high-security assets can leak during an execution of a program. One approach for performing a precise information flow analysis, is by a reduction to safety verification by means of \emph{self-composition}. However, this reduction is intractable since it requires two copies of the program to be created, on which a safety property is checked. A second, less precise approach, is by using \emph{taint analysis}. Taint analysis provides a sound approximation for secure information flow analysis. While more efficient than self-composition, this approach often results in many ``false'' alarms, i.e. reporting leaks that do not exist.
+
+In order to bridge the gap between the above two approaches, in this paper we present \Ifc, a novel, precise and efficient, secure information flow analysis technique. \Ifc relies on an interplay between a symbolic path-sensitive taint analysis and self-composition, where taint analysis guides self-composition and vice-versa. As a result of this interplay, full self-composition is never required, yet, the overall technique is sound and complete.
+
+We implemented a prototype of \Ifc on top of SeaHorn and evaluated it on challenging examples. The experimental results show the potential of our approach.
+
+
+%% aarti's suggestion below
+
+We present a novel algorithm for verifying secure information flow that guarantees the absence of information leaks from high-security inputs to low-security outputs in a program. A classic approach for verifying secure information flow is to reduce the problem to safety verification on a \emph{self-composition}, where two copies of the program are created~\cite{BartheCsfw04}.
+Although this reduction is sound and complete, it is challenging to perform safety verification in practice, especially on two copies of a program.
+Another, less precise approach, is by using \emph{taint analysis} based on an information flow type system. Taint analysis provides a sound approximation for secure information flow. While more scalable than the self-composition approach, it often results in many false alarms, i.e., reporting leaks that do not exist.
+
+To bridge the gap between these two approaches, in this paper we present \Ifc, a novel, precise, and efficient verifier for secure information flow. \Ifc relies on an interplay between a symbolic path-sensitive taint analysis and self-composition, where taint analysis guides self-composition and vice-versa. As a result of this interplay, full self-composition is never required, yet, the overall technique is sound and complete.
+We implemented a prototype of \Ifc on top of SeaHorn~\cite{Seahorn} and evaluated it on challenging examples. The experimental results show the potential of our approach.
+\end{comment}
+
+%%%%%%%%%%%%%
+
+The secure information flow problem has many applications in checking security properties in programs, e.g., that there are no information leaks from high-security inputs to low-security outputs. 
+In this paper, we present \Ifc, a novel, precise, and efficient verifier for secure information flow. \Ifc improves the classical  self-composition approach (due to Barthe et al.) by making it lazier, in contrast to an eager upfront translation into two copies of a program. This lazy duplication is guided by taint analysis.
+We implemented a prototype of \Ifc on top of SeaHorn tool and evaluated it on challenging examples. The experimental results show the potential of our approach.
+
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+\input{intro}
+
+\section{Motivating Examples}
+\label{sec:motiv}
+\input{motiv}
+
+\section{Preliminaries}
+\label{sec:prelim}
+\input{prelim}
+
+%\section{Lazy Self-Composition}
+\label{sec:algo}
+\input{algo}
+
+\section{Implementation and Experiments}
+\label{sec:exp}
+\input{exp}
+
+\section{Related Work}
+\label{sec:related}
+\input{related}
+
+\section{Conclusions and Future Directions}
+\label{sec:concl}
+\input{concl}
+
+\bibliographystyle{splncs03}  
+
+\bibliography{b1}
+
+\end{document}

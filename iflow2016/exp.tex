@@ -1,0 +1,61 @@
+% exp.tex
+
+\subsection{Implementation}
+\subsection{Experiments: \Bmc}
+
+\begin{table}
+    \centering
+    \begin{tabular}{cccccc}
+        \toprule
+        \textbf{Benchmark} & \textbf{Result} & \textbf{Time (baseline) } & \textbf{Time (\Bmc)} & \textbf{Time (\Bmc taint checks)} & Description \\
+        \midrule
+        fibonacci         &   SAFE   & 0.55 & 0.1   & 0.07   & N-th Fibonacci number\\ \midrule
+        list\_fakemalloc4  &   SAFE   & 2.9  & 0.15  & 0.007  & linked list operations, maximum 4 nodes\\ \midrule
+        list\_fakemalloc8  &   SAFE   & 3.1  & 0.6   & 0.02   & same as above, maximum 8 nodes\\ \midrule
+        list\_fakemalloc16 &   SAFE   & 3.2  & 1.83  & 0.08   & same as above, maximum 16 nodes\\ \midrule
+        modexp\_safe       &   SAFE   & TO   & 0.05  & 0.01   & modular exponentiation, no leak\\ \midrule
+        modexp\_unsafe     & UNSAFE   & TO   & 1.63  & 1.5    & modular exponentiation, with leaks\\ \midrule
+        pwdcheck\_safe16   &   SAFE   & TO   & 0.05  & 0.01   & string comparison, no leak, 16 characters\\ \midrule
+        pwdcheck\_unsafe16 & UNSAFE   & TO   & 1.63  & 1.5   & string comparison, with leaks, 16 characters\\
+        \bottomrule
+    \end{tabular}   
+    \caption{\Bmc experiments}
+    \label{tab:exp}
+\end{table}
+
+We tested our \Bmc implementation on several micro-benchmarks in addition to benchmarks inspired by real-world programs. The performance of \Bmc is compared with the baseline of eager two-copy translation as shown in Tab~\ref{tab:exp}.
+
+\subsection{Experiments: Micro-Benchmarks}
+show scalability for increasing parameter values, compare with baseline (eager 2-copy translation)
+
+\begin{table}
+    \centering
+    \begin{tabular}{ccccc}
+        \toprule
+        \textbf{Benchmark} & \textbf{Parameter} & \textbf{Baseline (SC)} & \textbf{Taint Analysis} & \textbf{Taint Analysis + SC} \\
+        \midrule
+        \multirow{4}{*}{Password Check/Safe} 
+        &   4   &          8.8 &        0.2 &    N/A \\
+        &   8   & TO          & 0.2     & N/A \\
+        &   16  & TO          & 0.2     & N/A \\
+        &   32  & TO          & 0.2     & N/A \\
+        \midrule
+        \multirow{2}{*}{Modular Addition} 
+        & 2048b & 1.0 & 0.2 & N/A \\
+        & 4096b & TA  & 0.3 & N/A \\
+        \bottomrule
+    \end{tabular}   
+    \caption{Results}
+    \label{tab:results}
+\end{table}
+\begin{center}
+\end{center}
+\subsection{Experiments: Case-studies}
+Pramod: please select which examples are inspired by real case studies \\
+We should try to find a few more (2-3?) examples from recent papers: Almeida Usenix16, Dillig PLDI16 \\
+
+
+
+
+
+

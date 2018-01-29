@@ -1,0 +1,469 @@
+\documentclass[letterpaper,11pt]{article} 
+\usepackage[letterpaper,hmargin=1in,vmargin=1in]{geometry} 
+\usepackage{fullpage}
+\usepackage[pdfstartview=FitH,colorlinks,linkcolor=blue,citecolor=blue]{hyperref} 
+\usepackage[linesnumbered,lined,boxed,commentsnumbered]{algorithm2e}
+\usepackage[T1]{fontenc}
+\usepackage{amsthm} 
+\usepackage{color} 
+\usepackage{times} 
+\usepackage{microtype,pdfsync} 
+\usepackage{amsmath,amsfonts,amssymb} 
+\usepackage{url} 
+\usepackage{xspace,paralist}
+\usepackage{lmodern}
+\usepackage{float}
+\floatstyle{boxed}
+\restylefloat{figure}
+
+
+
+
+\begin{document}
+
+\title{Algorithms for information flow security checking}
+
+\maketitle
+
+
+\begin{algorithm}
+\SetAlgoLined
+\SetKwInOut{Input}{Input}
+\SetKwInOut{Output}{Output}
+
+\SetKwFunction{Unroll}{LoopUnroll}
+\SetKwFunction{ExtractT}{EncodeDynamicTaint}
+\SetKwFunction{SelfComp}{SelfComposition}
+\SetKwFunction{Solver}{SMTSolver}
+\SetKwFunction{GenQuery}{CreateTaintQueries}
+
+\SetKwData{Program}{p}
+\SetKwData{UnrolledP}{unrolled\_p}
+\SetKwData{UnrollBound}{unroll\_bound}
+\SetKwData{CurrentBound}{current\_bound}
+\SetKwData{TaintP}{taint\_p}
+\SetKwData{SCP}{sc\_p}
+\SetKwData{Result}{result}
+\SetKwData{LowVar}{low\_var}
+\SetKwData{DupVar}{dup\_var}
+\SetKwData{HighVar}{hi\_var}
+\SetKwData{LowOut}{low\_output}
+
+\SetKwComment{Comment}{/*}{*/}
+
+\Input{$p$: set of horn rules, the program in CHC\\ $l: var \rightarrow \{High, Low\}$ labeling of program variables}
+\Output{Validity of non-interference property (no information flow from $High$ variables to $Low$ variables)}
+
+\Begin{
+    \Comment{IFC.hh, IFC.cc}
+    initialization\;
+    \While{\CurrentBound $<$ \UnrollBound}{
+        \UnrolledP $\leftarrow$ \Unroll{\Program, \CurrentBound}\;
+        \TaintP $\leftarrow$ \ExtractT{\UnrolledP}\;
+        \SCP $\leftarrow$ \SelfComp{\UnrolledP, \TaintP}\;
+        \ForEach{\LowVar in \Program}{
+            \DupVar $\leftarrow$ find duplicate of \LowVar in \SCP\;
+            insert constraint \DupVar $==$ \LowVar into \SCP\;
+        }
+        \ForEach{\HighVar in \Program}{
+            \DupVar $\leftarrow$ find duplicate of \HighVar in \SCP\;
+            insert constraint \DupVar $!=$ \HighVar into \SCP\;
+        }
+        \ForEach{\LowOut in \Program}{
+            \DupVar $\leftarrow$ find duplicate of \LowOut in \SCP\;
+            insert assertion \DupVar $==$ \LowOut into \SCP\;
+        }
+        \Result $\leftarrow$ \Solver{\SCP}\;
+        \If{\Result is counterexample}{
+            \Return verification failed\;
+        }\ElseIf{\Result shows taint squashed}{
+            \Return verification successful\;
+        }
+        \CurrentBound ++\;
+    }
+    \Return verification successful\;
+}
+\caption{Top level procedure}
+\end{algorithm}
+
+
+\begin{algorithm}
+\SetAlgoLined
+
+\SetKwFunction{CreateWto}{WeakTopologicalOrder}
+\SetKwFunction{DuplicateRule}{DuplicateRule}
+\SetKwFunction{Unroll}{unroll}
+\SetKwFunction{Visit}{visit}
+
+
+\SetKwData{Wto}{wto}
+\SetKwData{Rel}{rel}
+\SetKwData{NewRel}{new\_rel}
+\SetKwData{Program}{p}
+\SetKwData{UnrolledP}{unrolled\_p}
+\SetKwData{Component}{component}
+\SetKwData{SubComp}{sub\_component}
+\SetKwData{Stack}{unroll\_bound\_stack}
+\SetKwData{Tag}{tag}
+\SetKwData{Rule}{rule}
+\SetKwData{NewRule}{new\_rule}
+
+\SetKwComment{Comment}{/*}{*/}
+\SetKwProg{Def}{def}{:}{end}
+
+\KwData{$p$:\textbf{set of horn rules} Program with loop \\ $loop\_bound$:\textbf{int} Unroll bound for each loop}
+\KwResult{$unrolled\_p$:\textbf{set of horn rules} unrolled program}
+
+\Begin{
+    \Comment{HornUnroll.hh, HornUnroll.cc}
+    \Stack $\leftarrow$ empty\;
+    \Wto $\leftarrow$ \CreateWto{\Program}\;
+    \ForEach{\Component of \Wto}{
+        \Visit{\Component}\;
+    }
+
+}
+
+\Def{\Visit{\Component}}{
+    \If{\Component is singleton}{ \Unroll {\Component}\;}
+    \ElseIf{\Component is nested}{
+        push $0$ on top of \Stack\;
+        \While{top of \Stack $<$ $loop\_bound$}{
+            \Unroll {first element of \Component}\;
+            \ForEach{\SubComp in \Component}{
+                \Visit{\SubComp}\;
+            }
+            increment top of \Stack\;
+        }
+        pop top of \Stack\;
+    }
+}
+
+\Def{\Unroll{\Rel}}{
+
+    \Tag $\leftarrow$ contatenate elements on \Stack\;
+    \NewRel $\leftarrow$ apply \Tag to \Rel\;
+    save \NewRel into \UnrolledP\;
+    
+    \ForEach{\Rule in \Program pointing into \Rel}
+    {
+        \NewRule $\leftarrow$ replace \Rel with \NewRel in \Rule\;
+        add \NewRule into \UnrolledP\;
+    }
+}
+
+\caption{Loop unroller procedure}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}
+\SetAlgoLined
+
+\SetKwFunction{GetVars}{GetVarMapping}
+\SetKwFunction{AddGlue}{AddGlueCode}
+
+\SetKwData{Program}{unrolled\_p}
+\SetKwData{Caller}{caller}
+\SetKwData{Callee}{callee}
+\SetKwData{Rel}{relation}
+\SetKwData{Var}{variable}
+\SetKwData{UniqueVar}{unique\_var}
+\SetKwData{Arg}{argument}
+\SetKwData{Body}{rule\_body}
+\SetKwData{Rule}{horn\_rule}
+\SetKwData{StdVars}{var\_mapping}
+\SetKwData{SmtRule}{smt\_expr}
+\SetKwData{DepList}{dep\_list}
+\SetKwData{VarList}{var\_list}
+\SetKwData{ArgList}{arg\_list}
+\SetKwData{Eq}{eq}
+\SetKwData{Entry}{entry}
+\SetKwData{Exit}{exit}
+
+\SetKwComment{Comment}{/*}{*/}
+\SetKwProg{Def}{def}{:}{end}
+
+\KwData{$unrolled\_p$ unrolled program}
+\KwResult{$smt\_query$:\textbf{set of SMT assertions} Query to SMT solver}
+
+\Begin{
+    \Comment{HornToSMT.hh, HornToSMT.cc}
+    \ForEach{\Rule in \Program}{
+        decompose \Rule into \Caller $\land$ \Body $\implies$ \Callee\;
+        \StdVars $\leftarrow$ \GetVars{\Caller}\;
+        \SmtRule $\leftarrow$ replace variables appearing in \Rule with \StdVars\;
+        \SmtRule $\leftarrow$ \AddGlue{\SmtRule}\;
+        save \SmtRule for \Caller $\implies$ \Callee\;
+    }
+
+    \ForEach{\Callee relation in \Program}{
+        \DepList $\leftarrow$ empty\;
+
+        \ForEach{\Caller of \Callee in \Program}{
+            get \SmtRule for \Caller $\implies$ \Callee\;
+            append expression \Caller $\land$ \SmtRule to \DepList\;
+        }
+        create SMT rule \Callee $\implies$ disjunction of \DepList\;
+    }
+    create SMT rule \Entry from \Program\;
+    create SMT assertion \Exit from \Program\;
+}
+
+
+\Def{\GetVars{\Rel}}{
+    \StdVars $\leftarrow$ lookup standard variables for \Rel\;
+    \If{\StdVars does not exist}{
+        \StdVars $\leftarrow$ empty mapping\;
+        \ForEach{\Var in \Rel}{
+            \UniqueVar $\leftarrow$ get next unique variable\;
+            save \Var $\rightarrow$ \UniqueVar in \StdVars\;
+        }
+        save \StdVars for \Rel\;
+    }
+    \Return \StdVars\;
+}
+
+\Def{\AddGlue{\SmtRule}}{
+    \VarList $\leftarrow$ create list of standard variables from \GetVars{\Rel}\;
+    \ArgList $\leftarrow$ create list of arguments of \Rel in \SmtRule\;
+    \ForEach{\Var in \VarList and \Arg in \ArgList}{
+        \If{\Var different than \Arg}{
+            \Eq $\leftarrow$ create expression \Var == \Arg\;
+            append \Eq to \SmtRule\;
+        }
+    }
+    \Return \SmtRule\;
+}
+
+\caption{Horn to SMT translation procedure}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}
+\SetAlgoLined
+\SetKwFunction{CreateCDG}{ComputeControlDependency}
+\SetKwFunction{CreateIDT}{ComputeDominatorTree}
+\SetKwFunction{GetCD}{GetControlDependency}
+\SetKwFunction{Disj}{Disj}
+\SetKwFunction{Conj}{Conj}
+
+\SetKwData{G}{graph}
+\SetKwData{RevG}{rev\_graph}
+\SetKwData{A}{vertexA}
+\SetKwData{B}{vertexB}
+\SetKwData{L}{vertexL}
+
+
+
+\SetKwData{Program}{unrolled\_p}
+\SetKwData{TaintP}{taint\_smt}
+\SetKwData{TaintSMT}{taint\_rule}
+\SetKwData{Rel}{caller}
+\SetKwData{BrRel}{branch\_rel}
+\SetKwData{Cond}{cond}
+\SetKwData{CondTaint}{cond\_t}
+\SetKwData{CtrlTaint}{ctrl\_taint\_list}
+\SetKwData{Rule}{rule}
+\SetKwData{Assign}{assignment}
+\SetKwData{Var}{var}
+\SetKwData{Expr}{expr}
+\SetKwData{Body}{rule\_body}
+\SetKwData{DataTaint}{data\_taint\_list}
+\SetKwData{VarTaint}{var\_t}
+\SetKwData{TaintExpr}{taint\_expr}
+\SetKwData{TaintList}{taint\_assign\_list}
+\SetKwData{CtrlCond}{ctrl\_cond}
+
+\SetKwComment{Comment}{/*}{*/}
+
+\SetKwProg{Def}{def}{:}{end}
+
+\KwData{$unrolled\_p$ unrolled program}
+\KwResult{$taint\_smt$ taint propagation logic in SMT}
+
+\Def{\CreateCDG{\Program}}{
+    \Comment{HornCtrlDep.hh, HornCtrlDep.cc}
+    \G $\leftarrow$  create call graph of \Program\;
+    \RevG $\leftarrow$ create reverse of \G\;
+    \CreateIDT{\RevG}\;
+    \ForEach{edge from \A to \B on \G}{
+        \If{\B does not post-dominate \A}{
+            \L $\leftarrow$ immediate post dominator of \A\;
+            \While{\B is not \L}{
+                \B is directly control dependent on \A\;
+                \B $\leftarrow$ immediate post dominator \B\;
+            }
+        }
+    }
+}
+
+\Begin{
+    \Comment{TaintTracker.hh, TaintTracker.cc}
+    \CreateCDG{\Program} \;
+    \Comment{Store all pairs $(p, q)$ where relation $p$ is directly control dependent on branch $q$}
+    \ForEach{\Rule in \Program}{
+        decompose \Rule into \Rel $\land$ \Body $\implies$ \Callee\;
+        \CtrlTaint $\leftarrow$ empty\;
+        \ForEach{\BrRel in \GetCD{\Rel}}{
+        \Comment{for all direct and indirect control dependencies of \Rel}
+            \Cond $\leftarrow$ look up branch condition of \BrRel\;
+            \CondTaint $\leftarrow$ look up taint variable of \Cond\;
+            append \CondTaint to \CtrlTaint
+        }
+        \TaintList $\leftarrow$ empty\;
+        \ForEach{\Assign : \Var := \Expr in \Body}{
+            \DataTaint $\leftarrow$ list of taint variables for each program variable in \Expr\;
+            \VarTaint $\leftarrow$ create taint variable for \Var\;
+            \TaintExpr $\leftarrow$ create expression \VarTaint := \Disj{\CtrlTaint, \DataTaint}\;
+            append \TaintExpr to \TaintList\;
+        }
+
+        \CtrlCond $\leftarrow$ condition in \Body\;
+        \TaintSMT $\leftarrow$ create SMT formula \Rel $\land$ \CtrlCond $\implies$ \Conj{\TaintList}\;
+        insert assertion \TaintSMT into \TaintP\;
+    }
+}
+
+\caption{Extract taint procedure}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}
+\SetAlgoLined
+
+\SetKwData{Program}{unrolled\_p}
+\SetKwData{Caller}{caller}
+\SetKwData{Callee}{callee}
+\SetKwData{DupCaller}{dup\_caller}
+\SetKwData{DupCallee}{dup\_callee}
+\SetKwData{Pred}{predicate}
+\SetKwData{Var}{var}
+\SetKwData{DupVar}{dup\_var}
+\SetKwData{Body}{rule\_body}
+\SetKwData{DupBody}{dup\_body}
+\SetKwData{Rule}{horn\_rule}
+\SetKwData{DupRule}{dup\_rule}
+\SetKwData{Assign}{assignment}
+\SetKwData{Expr}{expr}
+\SetKwData{DupExpr}{dup\_expr}
+\SetKwData{Query}{query}
+\SetKwData{Result}{result}
+\SetKwData{SCP}{sc\_p}
+
+\SetKwFunction{Solver}{SMTSolver}
+\SetKwComment{Comment}{/*}{*/}
+\SetKwProg{Def}{def}{:}{end}
+
+\KwData{$unrolled\_p$ unrolled program, $taint\_smt$ taint propagation logic in SMT}
+\KwResult{$sc\_p$ Self-composed program}
+
+\Begin{
+    \Comment{LazySC.hh, LazySC.cc}
+    \ForEach{\Pred in \Program}{
+        create duplicate of \Pred for the duplicate program\;
+    }
+    \ForEach{\Var in \Program}{
+        create duplicate of \Var for the duplicate program\;   
+    }
+
+    \ForEach{\Rule in \Program (starting from entry)}{
+        decompose \Rule into \Caller $\land$ \Body $\implies$ \Callee\;
+        \DupCaller $\leftarrow$ find duplicate of predicate \Caller\;
+        \DupCallee $\leftarrow$ find duplicate of predicate \Callee\;
+        \DupBody $\leftarrow$ empty\;
+
+        \ForEach{\Assign : \Var := \Expr in \Body}{
+            \DupVar $\leftarrow$ find duplicate of \Var\;
+            \Query $\leftarrow$ create query on taint of \Var\;
+            \Result $\leftarrow$ \Solver{$taint\_smt$, \Query}\;
+            \If{\Result shows \Var may be tainted}{
+                \DupExpr $\leftarrow$ replace variables in \Expr with their duplicate\;
+            }\ElseIf{\Result shows \Var is never tainted}{
+                \DupExpr $\leftarrow$ \Var\;
+            }
+            insert assignment \DupVar := \DupExpr into \DupBody\;
+        }
+
+        \ForEach{Boolean constraint \Var in \Body}{
+            \DupVar $\leftarrow$ find duplicate of \Var\;
+            insert constraint \DupVar into \DupBody\;
+        }
+
+        \DupRule $\leftarrow$ create rule \DupCaller $\land$ \DupBody $\implies$ \DupCallee\;
+        insert \Rule into \SCP\;
+        insert \DupRule into \SCP\;
+
+    }
+    return \SCP\;
+}
+
+\caption{Lazy Self-composition}
+\end{algorithm}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\begin{algorithm}
+\SetAlgoLined
+
+\SetKwData{Program}{unrolled\_program}
+\SetKwData{Caller}{caller}
+\SetKwData{Callee}{callee}
+\SetKwData{DupCaller}{dup\_caller}
+\SetKwData{DupCallee}{dup\_callee}
+\SetKwData{Pred}{predicate}
+\SetKwData{Var}{var}
+\SetKwData{VarT}{var\_t}
+\SetKwData{DupVar}{copy\_var}
+\SetKwData{Body}{rule\_body}
+\SetKwData{DupBody}{dup\_body}
+\SetKwData{Rule}{horn\_rule}
+\SetKwData{DupRule}{dup\_rule}
+\SetKwData{Assign}{assignment}
+\SetKwData{Expr}{expr}
+\SetKwData{DupExpr}{copy\_expr}
+\SetKwData{Query}{query}
+\SetKwData{Result}{result}
+\SetKwData{SCP}{sc\_p}
+
+\SetKwFunction{Solver}{SMTSolver}
+\SetKwComment{Comment}{/*}{*/}
+\SetKwProg{Def}{def}{:}{end}
+
+
+\Begin{
+
+    \ForEach{\Rule in \Program (starting from entry)}{
+        \ForEach{\Assign : \Var := \Expr in \Body}{
+            \If{\Solver{query on \VarT} \Var may be tainted}{
+                create duplicate assignment: \DupVar := \DupExpr \;
+            }\Else{
+                create assignment: \DupVar := \Var \;
+            }
+        }
+    }
+}
+
+% \caption{Lazy Self-composition (top level)}
+\end{algorithm}
+
+
+
+\end{document}

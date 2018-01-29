@@ -1,0 +1,58 @@
+% prelim.tex
+% Background and Terminology
+
+
+
+\subsection{Safety Verification}
+Given a program $A$, we define a \emph{safety verification} problem w.r.t. $A$ as a transition system $M=\langle X, \Init(X),\Tr(X,X'),\Bad(X)\rangle$ where $X$ denotes a set of (uninterpreted) constants, representing program variables; $\Init, \Tr$ and $\Bad$ are (quantifier-free) formulas in $FOL(\cT)$ representing the initial states, transition relation and bad states, respectively. The states of a transition system correspond to structures over a signature $\Sigma = \Sigma_{\cT} \cup X$, 
+%We write $\Tr(X,X')$ to denote that $\Tr$ is defined over the signature $\Sigma_{\cT} \cup X \cup X'$, where $X$ is used to represent the pre-state of a transition, and $X' = \{a' \mid a \in X\}$ is used to represent the post-state.
+
+A safety verification problem is to decide whether a transition
+system $M$ is SAFE or UNSAFE.
+
+We say that $M$ is UNSAFE iff there exists a
+number $N$ such that the following formula is satisfiable:
+\begin{equation}
+  \Init(X_0) \land \left( \Land_{i=0}^{N-1} \Tr(X_i, X_{i+1}) \right)
+  \land \Bad(X_N)
+\end{equation}
+where $X_i = \{a_i \mid a \in X\}$ is a copy of the constants used to represent the state of the system after the execution of $i$ steps.
+
+When $M$ is UNSAFE and $s_N\in\Bad$ is the reachable state, the path from $s_0\in\Init$ to $s_N$ is called a \emph{counterexample} (CEX).
+
+A transition system $M$ is SAFE iff the transition system has no counterexample, of any length. Equivalently, $M$ is SAFE iff there exists a formula $\Inv$, called a
+\emph{safe inductive invariant}, that satisfies:
+\begin{align}
+  \Init(X) &\to Inv(X) & \Inv(X) \land \Tr(X,X') &\to \Inv(X') & \Inv(X) &\to \neg \Bad(X)
+\end{align}
+
+In SAT-based model checking, the verification problem is determined by maintaining an \emph{inductive trace} of formulas $[F_0(X), \ldots, F_N(X)]$ that satisfy:
+\begin{align}
+  \Init(X) &\to F_0(X)  \\
+  \forall 0 \leq i < N \cdot F_i(X) \land \Tr(X,X') &\to F_{i+1}(X') \\
+  \forall i \cdot F_i(X) &\to \neg \Bad(X)
+\end{align}
+
+A trace $[F_0, \ldots, F_N]$ is \emph{closed} if $\exists 1 \leq i
+\leq N \cdot F_i \limp \left( \Lor_{j=0}^{i-1}F_j\right)$. There is an
+obvious relationship between existence of closed traces and safety of
+a transition system:
+\begin{theorem}
+  \label{thm:closed-safety}
+  A transition system $T$ is SAFE iff it admits a safe closed trace.
+\end{theorem}
+Thus, safety verification is reduced to searching for a safe closed
+trace or finding a CEX.
+
+\yv{Should we note that given a program $A$, a transition system $M$ is created through CHC translation?}
+
+\subsection{Security Verification}
+
+Let $A$ be program.
+
+\subsubsection{Property Specification}
+Information flow, downgrading, constant-time and side-channel leaks
+
+\subsubsection{Self-composition}
+k-safety, TA approach?
+

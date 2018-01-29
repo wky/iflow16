@@ -1,0 +1,253 @@
+% algo.tex
+
+\section{Information Flow Analysis}
+
+Let $A$ be a program over a set of program variables $X$. We assume $\Init(X)$ is a formula describing the initial states and $\Tr(X,X')$ a transition relation. Note that we assume a ``stuttering'' transition relation, namely, $\Tr$ can non-deterministically either move to the next state or stay in the same state. Let us assume that $H \subset X$ is a set of high-security variables and $L := X\backslash H$ is a set of low-security variables. The \emph{information flow} problem checks whether there exists an execution of $A$ such that the value of variables in $H$ propagates to variables in $L$. Intuitively, information flow analysis checks if low-security variables ``leak'' information about high-security variables.
+
+In what follows, we describe two approaches for performing information flow analysis.
+
+\subsection{Taint Analysis}  \label{taint-analysis}
+
+In the setting of taint analysis, we mark high-security variables with a ``taint'' and check if this taint can propagate to low-security variables.
+The propagation of taint through program variables of $A$ is determined by assignments in $A$ and the control structure of $A$. In order to perform taint analysis, we formulate it as a safety verification problem. For this purpose, for each program variable $x\in X$, we introduce a new ``taint'' variable $x_t$. Let $X_t := \{x_t | x\in X\}$ be the set of taint variables where $x_t\in X_t$ is of sort Boolean. %We now formulate taint analysis as a safety verification problem. 
+Let us define a transition system $M_t := \langle Y, \Init_t,\Tr_t,\Bad_t\rangle$ where $Y := X\cup X_t$ and  
+\begin{align}
+    \Init_t(Y) & := \Init(X)\land\left(\Land\limits_{x\in H}x_t\right)\land\left(\Land\limits_{x\in L}\neg x_t\right)\\
+    \Tr_t(Y,Y') &:= \Tr(X,X')\land\hat{\Tr}(Y,X_t')\\
+    \Bad_t(Y) &:= \Lor\limits_{x\in L} x_t
+\end{align}
+
+Since taint analysis tracks information flow from high-security to low-security variables, all variables in $H_t$ are initialized to $\true$ while variables in $L_t$ are initialized to $\false$. W.l.o.g., let us denote state update for a program variable $x\in X$ as:
+
+$$x' = cond(X) \; ? \; \varphi_1(X)\; :\; \varphi_2(X)$$
+
+Let $\varphi$ be a formula over $\Sigma$. We capture the taint of $\varphi$ by:
+
+\[ \Theta(\varphi) =
+  \begin{cases}
+    \false       & \quad \text{if } \varphi\cap X = \emptyset\\
+    \Lor\limits_{x\in \varphi} x_t  & \quad \text{otherwise}
+  \end{cases}
+\]
+
+Based on the above, $\hat{\Tr}(X_t,X_t')$ is defined as follows:
+$$ \Land\limits_{x_t\in X_t} x_t' = \Theta(cond)\lor \left( cond\; ? \; \Theta(\varphi_1) \; : \; \Theta(\varphi_2) \right)$$
+
+
+Intuitively, taint may propagate from $x_1$ to $x_2$ either when $x_1$ is assigned an expression that involves $x_2$ or when an assignment to $x_1$ is controlled by $x_2$. The bad states ($\Bad_t$) are all states where a low-security variable is tainted.
+
+\subsection{Self Composition} \label{self-composition}
+In the context of self-composition, information flow is tracked over an execution of two copies of the program, $A$ and $A_s$. Let us assume $X_s := \{x_s | x\in X\}$ is the set of program variables of $A_s$. Similarly, $\Init_s(X_s)$ and $\Tr_s(X_s,X_s')$ are the initial states and transition relation of $A_s$. Note that $\Init_s$ and $\Tr_s$ are computed from $\Init$ and $\Tr$ by means of substitutions. Namely, substituting every occurrence of $x\in X$ or $x'\in X'$ with $x_s\in X_s$ and $x_s'\in X_s'$, respectively. Similarly to taint analysis, we formulate information flow over a self-composed program by a safety verification problem: $M_s := \langle Z, \Init_s,\Tr_s,\Bad_s\rangle$ where $Z := X\cup X_s$ and  
+\begin{align}
+    \Init_s(Z) & := \Init(X)\land\Init(X_s)\land\left(\Land\limits_{x\in L} x = x_s\right)\\
+    \Tr_s(Z,Z') &:= \Tr(X,X')\land\Tr(X_s,X_s')\\
+    \Bad_s(Z) &:= \Lor\limits_{x\in L} \neg(x = x_s)
+\end{align} 
+
+In order to track information flow, variables in $L_s$  are initialized to be equal to their counterpart in $L$, while variables in $H_s$ remain unconstrained. A leak is captured by the bad states (i.e. $\Bad_s$). More precisely, there exists a leak iff there exists an execution of $M_s$ that ends in a state where a low-security variable $x\in L$ has a different value then its counterpart $x_s\in L_s$.
+
+\yv{Note that we allow for $\Tr$ to be stuttering - meaning, it can either move to the next state, or stay at the same state - this is crucial for correctness of $M_s$}
+
+
+\section{Lazy Self Composition}
+
+In this section we introduce \Ifc, an algorithm for information flow analysis, that combines both taint analysis and self-composition. 
+
+Recall that taint analysis is imprecise in the sense that may report spurious counterexamples, namely, spurious leaks. In contrast, self composition is precise, but less efficient than taint analysis. The fact that self composition requires a duplication of the program often hinders its performance.
+
+To address both efficiency and precision, \Ifc interchangeably uses taint analysis to guide self composition and vice-versa. As a result, a self composition is applied lazily, when required, making \Ifc more efficient than the naive approach, while at the same time sound and complete.
+
+Before introducing \Ifc, let us introduce the following lemma:
+
+\begin{lemma}
+$M_t$ over-approximates $M_s$.
+\end{lemma}
+
+\begin{corollary}
+If there exists a path in $M_s$ from $\Init_s$ to $\Bad_s$ then there exists a path in $M_t$ from $\Init_t$ to $\Bad_t$.
+\end{corollary}
+
+\begin{corollary}
+If there exists no path in $M_t$ from $\Init_t$ to $\Bad_t$ then there exists no path in $M_s$ from $\Init_s$ to $\Bad_s$.
+\end{corollary}
+
+\Ifc makes use of the fact $M_t$ can be viewed as an abstraction w.r.t. to $M_s$, and follows an abstraction-refinement paradigm for secure information flow analysis. In these setting, $M_t$ is used to find a possible counterexample, i.e. a path that leaks information. Then, $M_s$ is used to check if this counterexample is spurious or real. In case the counterexample is found to be spurious, \Ifc uses the proof that shows why the counterexample is not possible in $M_s$ to refine $M_t$.
+
+A sketch of \Ifc appears in Alg~\ref{alg:ifc}. Recall that we assume that solving a safety verification problem is done by maintaining an inductive trace. We denote the traces for $M_t$ and $M_c$ by $\vG=[G_0,\ldots,G_k]$ and $\vH=[H_0,\ldots,H_k]$, respectively. \Ifc starts by initializing $M_t$, $M_s$  and their respective traces $\vG$ and $\vH$ (lines~\ref{line:init_s}-\ref{line:init_e}). The main loop of \Ifc (lines~\ref{line:main_s}-\ref{line:main_e}) starts by looking for a counterexample over $M_t$ (line~\ref{line:solve_taint}). In case no counterexample is found, \Ifc deduces there are no leaks and returns SAFE.
+
+If a counterexample $\pi$ is found in $M_t$, \Ifc first updates the trace of $M_s$, i.e. $\vH$, by rewriting $\vG$ (line~\ref{line:taint_to_sc}). In order to check if $\pi$ is spurious, \Ifc creates a new safety verification problem $M_c$, a version of $M_s$ constrained by $\pi$ (line~\ref{line:constraint}) and solves it (line~\ref{line:solve_sc}). If $M_c$ has a counterexample, \Ifc returns UNSAFE. Otherwise, $\vG$ is updated by $\vH$ (line~\ref{line:sc_to_taint}) and $M_t$ is refined such that $\pi$ is ruled out (line~\ref{line:refine}).
+
+The above gives a high-level overview of how \Ifc operates. We now go into more detail. 
+More specifically, we describe the functions $\texttt{ReWrite}$, $\texttt{Constraint}$ 
+and $\texttt{Refine}$. We note that these functions can be designed and implemented in several
+ways. In what follows we describe possible choices.
+
+\begin{figure}[!t]
+  \begin{algorithm2e}[H]
+  \DontPrintSemicolon
+  \SetAlgoVlined
+  \LinesNumbered
+   
+  \KwIn{A program $A$ and a set of high-security variables $H$}
+  \KwOut{$\texttt{SAFE}$, $\texttt{UNSAFE}$ or $\texttt{UNKNOWN}$.}
+
+  $M_t \gets \texttt{ConstructTaintModel}(A, H)$\\ \label{line:init_s}
+  $M_s \gets \texttt{ConstructSCModel}(A, H)$\\
+  
+  $\vG \gets [G_0=\Init_t]$\\
+  $\vH \gets [H_0=\Init_s]$\\ \label{line:init_e}
+  \Repeat {$\infty$} {\label{line:main_s}
+     $(\vG, R_{taint},\pi)\gets \texttt{MC.Solve}(M_t,\vG)$\label{line:solve_taint}\\
+     \uIf{$R_{taint} = \text{SAFE}$} {
+        \Return $\texttt{SAFE}$
+     }
+     \uElse {
+        $\vH\gets\texttt{ReWrite}(\vG, \vH)$\label{line:taint_to_sc}\\
+        $M_c \gets \texttt{Constraint}(M_s,\pi)$\label{line:constraint}\\
+        $(\vH, R_{s},\pi)\gets \texttt{MC.Solve}(M_c,\vH)$\label{line:solve_sc}\\
+        \uIf{$R_{s} = \text{UNSAFE}$} {
+            \Return $\texttt{UNSAFE}$
+        }
+     	\uElse {
+ 	        $\vG\gets\texttt{ReWrite}(\vH, \vG)$\label{line:sc_to_taint}\\
+     	    $M_t \gets \texttt{Refine}(M_t, \vG)$\label{line:refine}
+     	}
+     }
+  }\label{line:main_e}
+  \Return $\texttt{UNKNOWN}$
+  \caption{\texttt{\Ifc(A,H)}}
+  \label{alg:ifc}
+  \end{algorithm2e}
+\end{figure}
+
+
+
+
+\subsection{The Proof-based Abstraction Approach}
+
+Let us assume that when solving $M_t$ a counterexample $\pi$ of length $k$ is found and an inductive trace $\vG$ is computed. Following a proof-based abstraction approach, $\texttt{Constraint}()$ uses the length of $\pi$ to bound the length of possible executions in $M_s$ by $k$. Intuitively, this is similar to bounding the length of the computed inductive trace over $M_s$.
+
+In case $M_c$ has a counterexample, a real leak (of length $k$) is found. Otherwise, since $M_c$ considers all possible executions of $M_s$ of length $k$, \Ifc deduces that there are no counterexamples of length $k$. In particular, the counterexample $\pi$ is ruled out. \Ifc therefore uses this fact to refine $M_t$ and $\vG$.
+
+\subsubsection{Inductive Trace Rewriting}
+
+Consider the set of program variables $X$, taint variables $X_t$, and self compositions variables $X_s$. As noted above, $M_t$ over-approximates $M_s$. Intuitively, it may mark a variable $x$ as tainted (namely, evaluate $x_t$ to $\true$) when $x$ is not really tainted. Equivalently, if a variable $x$ is found 
+to be untainted in $M_t$ then it is known to also not leak information in $M_s$. More formally, the following relation holds: $\neg x_t\to  (x = x_s)$.
+
+This gives us a procedure for rewriting a trace over $M_t$ to a trace over $M_s$. Let $\vG=[G_0,\ldots,G_k]$
+be an inductive trace over $M_t$. Considering the definition of $M_t$, $\vG$ can be written as:
+$$ G_i(Y) := \bar{G}_i(X)\land \bar{G}^t_i(X_t)\land\psi(X,X_t) $$
+
+Following the definition of an inductive trace, the following holds:
+$$\bar{G}_i(X)  \land \Tr(X,X') \to \bar{G}_{i+1}(X')$$
+
+
+Let $\vH = [H_0,\ldots,H_k]$ be a trace w.r.t. $M_s$. $\vH$ can be strengthened by $\vG$ as follows: 
+\begin{align}
+    H_0 &:= \Init_s \\
+    H_i(Z) &:= H_i(Z)\land \bar{G}_i(X)\land\bar{G}_i(X_s)\land\left(\Land\{x = x_s | G_i(Y)\to\neg x_t \}\right)
+\end{align}
+
+\begin{lemma}
+Let $\vG$ be an inductive trace w.r.t. $M_t$ and $\vH$ an inductive trace w.r.t. $M_s$. Then, the updated $\vH$ defined above is an inductive trace w.r.t. $M_s$.
+\end{lemma}
+
+A similar strengthening can be defined when updating a trace $\vG$ w.r.t. $M_t$ by a trace $\vH$ w.r.t. $M_s$. In this case, we use the following relation: $\neg(x = x_s)\to x_t$. Let $\vH=[H_0(Z),\ldots,H_k(Z)]$ be the inductive trace w.r.t. $M_s$. $\vH$ can be written as
+$$H_i(Z) := \bar{H}_i(X)\land \bar{H}_i^s(X_s)\land \phi(X,X_s)$$
+
+Due to the definition of $M_s$ and an inductive trace, the following holds:
+    $$\bar{H}_i(X)\land\Tr(X,X')\to\bar{H}_i(X')$$  $$\bar{H}^s_i(X_s)\land\Tr(X_s,X_s')\to\bar{H}^s_i(X_s')$$
+    
+We can therefore strengthen a trace $\vG = [G_0,\ldots,G_k]$ w.r.t. $M_t$ by:
+\begin{align}
+    G_0 &:= \Init_s \\
+    G_i(Y) &:= G_i(Y)\land\bar{H}_i(X)\land\bar{H}^s_i(X)\land\left(\Land\{ x_t | H_i(Z)\to \neg (x = x_s) \}\right)
+\end{align}
+
+Note that the above strengthening of $\vG$ by $\vH$, and vice-versa, is based on the fact that $M_t$ over-approximates $M_s$ w.r.t. tainted variables. It therefore cannot add more ``precision'' to $\vG$.
+
+\subsubsection{Refinement}
+
+Recall that in the current scenario, a counterexample was found in $M_t$, and was shown to be 
+spurious in $M_s$. This fact can be used to refine both $M_t$ and $\vG$.
+
+As a first step, we observe that if $x = x_s$ in $M_s$, then $\neg x_t$ should hold in $M_t$.
+However, since $M_t$ is an over-approximation it may allow $x$ to be tainted, namely, allow $x_t$
+to be evaluated to $\true$.
+
+Based on the above, we reformulate the strengthening procedure for $\vG$. 
+Let $\vH = [H_0,\ldots,H_k]$ be a trace w.r.t. $M_s$ and $\vG = [G_0,\ldots, G_k]$
+be a trace w.r.t. $M_t$, then the strengthening of $\vG$ is defined by:
+
+\begin{align}
+    G_0    := & \Init_s \\
+    \begin{split}
+    G_i(Y) := & G_i(Y)\land\bar{H}_i(X)\land\bar{H}^s_i(X)\land\left(\Land\{ x_t | H_i(Z)\to \neg (x = x_s) \}\right)\land\\
+    & \left(\Land\{ \neg x_t | H_i(Z)\to (x = x_s) \}\right)
+    \end{split}
+\end{align}
+
+The above gives us a procedure for strengthening $\vG$ by using $\vH$. Note that $\vG$ is not necessarily an inductive trace w.r.t. $M_t$ since it may be the case that $G_i\land\Tr_t\to G_{i+1}'$ does not hold. This is due to $M_t$ being an over-approximation. Therefore, after $\vG$ is strengthened, $M_t$ must be refined such that $\vG$ is an inductive trace w.r.t. $M_t$.
+
+Let us assume that $G_i\land\Tr_t\to G_{i+1}'$ does not holds. By that, $G_i\land\Tr_t\land\neg G_{i+1}'$ is satisfiable. Considering the way $\vG$ is strengthened,
+three exists $x\in X$ such that $\neg x_t\in G_{i+1}$ and $G_i\land\Tr_t\land x_t'$ is satisfiable. The refinement step is defined by:
+
+$$ x_t' = G_i\;? \; \false \; : \left( \Theta(cond)\lor \left( cond\; ? \; \Theta(\varphi_1) \; : \; \Theta(\varphi_2) \right)\right)$$
+
+
+\subsection{BMC based Approach}
+In this section we introduce a different approach of solving the information flow security problem that is based on Bounded Model Checking (BMC). This approach is described in Alg~\ref{alg:ifc-bmc}.
+To perform the \Bmc procedure users should provide an extra parameter $BND$ which will limit the maximum number of loop unrolls performed on the program $A$, avoiding a possibly endless search. The unroll bound used in \Bmc is incremented repeatedly until reaching the maximum. 
+
+During each iteration of the algorithm (line~\ref{line:bmc-loop}), loops in the program $A$ are unrolled once more (line~\ref{line:bmc-unroll}) to produce a loop-free program, encoded as a transition system $M(i)$. A new transition system $M_t(i)$ is created (line~\ref{line:bmc-taint}) following the method described in section~\ref{taint-analysis}, in order to capture all the taint propagation that may happen in the unrolled program $M(i)$. Self composition is applied lazily on $M(i)$, based on the results of taint analysis through evaluating the states in $M_t(i)$. The procedure is described in section~\ref{self-composition} but in this BMC based implementation (line~\ref{line:lazysc}) we try our best effort to reduce the complexity of the self-composed program. In detail, for each variable $x$ appearing in $M(i)$, we denote the state update to be $x := \varphi$ and $x_t$ to be the corresponding variable in $M_t(i)$ which encodes whether $x$ could be tainted or not. If $x_t$ evaluates to $False$ we conclude that high security variables do not affect the value of $x$, therefore its duplicate variable $x'$ in the self-composed program $M_s(i)$ should hold the same value, eliminating the need to duplicate the computation that will produce $x'$. Otherwise if $x_t$ is $True$ or $UNKNOWN$, we will have to duplicate $\varphi$ and replace the occurrences of all program variables with their corresponding duplicates. Therefore we denote the state update for $x'$ in the self-composed program $M_s(i)$ to be $x' := \varphi'$:
+\[ \varphi' =
+  \begin{cases}
+    x       & \quad \text{if } x_t \text{ evaluates to } False\\
+    duplicate(\varphi)  & \quad \text{otherwise}
+  \end{cases}
+\]
+
+
+The self-composed program created by \texttt{LazySC} (line~\ref{line:lazysc}) is then verified by a model checker (in our case, the Z3 SMT solver). A counter example produced by the solver indicates a leak in the original program $A$. We have also implemented  liveness checks on taint, that can allow early termination of \Bmc if all the taint on live variables has been squashed during execution of the program. In either case \Bmc will stop unrolling the program any further. If no conclusive result can be acquired before reaching the unroll bound, \Bmc will return $UNKNOWN$.
+
+\begin{figure}[!t]
+  \begin{algorithm2e}[H]
+  \DontPrintSemicolon
+  \SetAlgoVlined
+  \LinesNumbered
+   
+  \KwIn{A program $A$ and a set of high-security variables $H$, max unroll bound $BND$}
+  \KwOut{$\texttt{SAFE}$, $\texttt{UNSAFE}$ or $\texttt{UNKNOWN}$.}
+
+  $i \gets 0$\\
+  \Repeat {$i = BND$} {\label{line:bmc-loop}
+  	 $M(i) \gets \texttt{LoopUnroll}(A, i)$ {\label{line:bmc-unroll}}\\
+  	 $M_t(i) \gets \texttt{EncodeTaint}(M(i))$ {\label{line:bmc-taint}}\\
+  	 $M_s(i) \gets \texttt{LazySC}(M_t(i), M(i))$ {\label{line:lazysc}}\\
+  	 $result \gets \texttt{Solve}(M_s(i))$\\
+     \uIf{$result = \text{counter-example}$} {
+        \Return $\texttt{UNSAFE}$
+     }
+     $live\_taint \gets \texttt{CheckLiveTaint}(M_t(i))$\\
+     \uIf{$live\_taint = \text{false}$} {
+      	\Return $\texttt{SAFE}$  
+     }
+     $i \gets i+1$\\
+  }
+  \Return $\texttt{UNKNOWN}$
+  \caption{\texttt{\Bmc(A,H,BND)}}
+  \label{alg:ifc-bmc}
+  \end{algorithm2e}
+\end{figure}
+
+
+
+\begin{comment}
+\subsection{Dynamic Taint Propagation}
+
+\subsection{Lazy Duplication}
+
+\subsection{Early Termination}
+
+\subsection{Interpolant-based Verification}
+\end{comment}
